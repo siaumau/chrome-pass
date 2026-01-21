@@ -39,9 +39,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 document.addEventListener('submit', (e) => {
   const form = e.target;
   const passwordInput = form.querySelector('input[type="password"]');
-  const usernameInput = form.querySelector('input[type="email"], input[type="text"], input[type="tel"]');
 
-  if (usernameInput && passwordInput && usernameInput.value && passwordInput.value) {
+  // 必须有密码字段，并且有值
+  if (!passwordInput || !passwordInput.value) {
+    return;
+  }
+
+  const textInputs = Array.from(form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]'));
+  
+  // 过滤掉可能是验证码的输入框
+  const verificationKeywords = ['code', 'otp', 'captcha', 'verify'];
+  const potentialUserInputs = textInputs.filter(input => {
+    // 排除密码字段本身（如果它的type是text）
+    if (input === passwordInput) return false;
+    
+    // 检查常见属性
+    const name = (input.name || '').toLowerCase();
+    const id = (input.id || '').toLowerCase();
+    const autocomplete = (input.autocomplete || '').toLowerCase();
+
+    if (autocomplete === 'one-time-code') return false;
+    
+    return !verificationKeywords.some(keyword => name.includes(keyword) || id.includes(keyword));
+  });
+
+  let usernameInput;
+  // 如果过滤后只剩一个，那么它很可能就是用户名字段
+  if (potentialUserInputs.length === 1) {
+    usernameInput = potentialUserInputs[0];
+  } else if (potentialUserInputs.length > 1) {
+    // 如果有多个，这是一个更复杂的场景。作为一个简单的备用方案，
+    // 我们可以选择第一个非空的输入框。
+    usernameInput = potentialUserInputs.find(input => input.value);
+  }
+
+  if (usernameInput && usernameInput.value) {
     // 发现登录行为，发送消息到 background script
     chrome.runtime.sendMessage({
       type: 'SAVE_CREDENTIALS',
