@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
       languageTitle: "Select Language",
       masterPasswordTitle: "Master Password",
       saveKeyButton: "Save Key",
+      masterPasswordPlaceholder: "Enter your master password",
+      unlockPrompt: "Please enter your master password to unlock.",
       fillIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
       deleteIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`
     },
@@ -121,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const masterPasswordInput = document.getElementById('master-password-input');
   const saveMasterPasswordButton = document.getElementById('save-master-password');
   const saveMasterPasswordButtonText = saveMasterPasswordButton.querySelector('.button-text');
+  const masterPasswordSection = document.querySelector('.master-password-section');
 
 
   let currentLang = 'en';
@@ -132,9 +135,26 @@ document.addEventListener('DOMContentLoaded', () => {
     languageSelect.title = t.languageTitle;
     masterPasswordTitle.textContent = t.masterPasswordTitle;
     saveMasterPasswordButtonText.textContent = t.saveKeyButton;
-    masterPasswordInput.placeholder = t.masterPasswordPlaceholder || "Enter your master password"; // Add placeholder translation
+    masterPasswordInput.placeholder = t.masterPasswordPlaceholder;
     currentLang = lang;
-    renderPasswords();
+    checkMasterPasswordStatus(); // Call this instead of renderPasswords directly
+  }
+
+  function checkMasterPasswordStatus() {
+    const t = { ...translations.en, ...translations[currentLang] };
+    chrome.storage.session.get('masterPassword', (result) => {
+      if (result.masterPassword) {
+        // Master password exists in session, so hide input and show passwords
+        masterPasswordSection.style.display = 'none';
+        passwordList.style.display = 'block'; // Ensure password list is visible
+        renderPasswords();
+      } else {
+        // No master password in session, show input and hide passwords (or show prompt)
+        masterPasswordSection.style.display = 'block';
+        passwordList.innerHTML = `<li style="text-align: center; justify-content: center;">${t.unlockPrompt}</li>`;
+        passwordList.style.display = 'block'; // Still display for the prompt
+      }
+    });
   }
 
   function renderPasswords() {
@@ -144,7 +164,8 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const credentials = { ...items };
       delete credentials.userLanguage;
-      delete credentials.masterPassword; // Ensure master password isn't displayed
+      // masterPassword is not stored in local.
+      // delete credentials.masterPassword; // This line is not needed here as masterPassword is in session storage
 
       if (Object.keys(credentials).length === 0) {
         const li = document.createElement('li');
@@ -188,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
               if (chrome.runtime.lastError) {
                 console.error('Fill request failed:', chrome.runtime.lastError.message);
                 // Prompt user if master password might be the issue
-                alert('Could not fill password. Please ensure your master password is correct and saved for the session.');
+                // alert('Could not fill password. Please ensure your master password is correct and saved for the session.');
               } else if (response && response.status === 'success') {
                 window.close();
               } else {
@@ -239,6 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.session.set({ 'masterPassword': masterPassword }, () => {
           masterPasswordInput.value = '';
           alert('Master password saved for this session.');
+          checkMasterPasswordStatus(); // Call after successful save
         });
       } else {
         alert('Please enter a master password.');

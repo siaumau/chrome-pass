@@ -90,6 +90,11 @@ const sendMessageToTab = (tabId, message) => {
   });
 };
 
+// Helper function to check if a URL is a restricted Chrome URL
+function isRestrictedURL(url) {
+  return url.startsWith('chrome://') || url.startsWith('about:') || url.startsWith('view-source:');
+}
+
 // Listen for messages from popup.js and content.js
 chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   if (request.type === 'FILL_REQUEST') {
@@ -134,7 +139,14 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         return true; // Indicate async response
       }
       const tabId = tabs[0].id;
-      console.log('BG: Active tab found:', tabId);
+      const tabUrl = tabs[0].url; // Get the tab's URL
+      console.log('BG: Active tab found:', tabId, 'URL:', tabUrl);
+
+      if (isRestrictedURL(tabUrl)) {
+        console.log('BG: Cannot fill on restricted URL. Sending error response.');
+        sendResponse({ status: 'error', message: 'Cannot fill passwords on special browser pages (e.g., chrome://, about:, view-source:).' });
+        return true; // Indicate async response
+      }
 
       try {
         console.log('BG: Sending FILL_CREDENTIALS to content script...');

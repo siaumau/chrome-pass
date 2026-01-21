@@ -7,23 +7,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // 寻找 type="password" 的输入框
     const passwordInput = document.querySelector('input[type="password"]');
     if (passwordInput) {
-      // 假设密码框所在的表单是登录表单
-      const form = passwordInput.closest('form');
-      if (form) {
-        // 在表单内寻找用户名输入框 (email, text, 等)
-        const usernameInput = form.querySelector('input[type="email"], input[type="text"], input[type="tel"]');
-        if (usernameInput) {
-          usernameInput.value = username;
-          passwordInput.value = password;
-          console.log('凭据已填充。');
-          sendResponse({ status: 'success' });
-        } else {
-          console.log('未能在表单中找到用户名输入框。');
-          sendResponse({ status: 'error', message: '未找到用户名输入框' });
+      let usernameInput = null;
+      let container = passwordInput.closest('form'); // Try to find a form first
+
+      if (!container) {
+        // If not in a form, try to find a common parent div that might contain both username and password
+        // Iterate up to a few parent elements to find a suitable container
+        let currentElement = passwordInput.parentElement;
+        for (let i = 0; i < 5 && currentElement; i++) { // Check up to 5 levels up
+          const tempUsernameInput = currentElement.querySelector('input[type="email"], input[type="text"], input[type="tel"]');
+          if (tempUsernameInput) {
+            container = currentElement;
+            usernameInput = tempUsernameInput;
+            break;
+          }
+          currentElement = currentElement.parentElement;
         }
       } else {
-        console.log('未找到密码框所在的表单。');
-        sendResponse({ status: 'error', message: '未找到登录表单' });
+        // If a form is found, find username input within that form
+        usernameInput = container.querySelector('input[type="email"], input[type="text"], input[type="tel"]');
+      }
+
+      if (usernameInput) {
+        usernameInput.value = username;
+        passwordInput.value = password;
+        console.log('凭据已填充。');
+        sendResponse({ status: 'success' });
+      } else {
+        console.log('未能在页面上找到用户名输入框。');
+        sendResponse({ status: 'error', message: '未找到用户名输入框' });
       }
     } else {
       console.log('未在页面上找到密码输入框。');
@@ -65,14 +77,19 @@ function findCredentialsAndSave(container) {
   }
 
   if (usernameInput && usernameInput.value) {
-    chrome.runtime.sendMessage({
-      type: 'SAVE_CREDENTIALS',
-      payload: {
-        url: window.location.hostname,
-        username: usernameInput.value,
-        password: passwordInput.value
-      }
-    });
+    // Check if the extension context is still valid before sending a message
+    if (chrome.runtime && chrome.runtime.id) {
+      chrome.runtime.sendMessage({
+        type: 'SAVE_CREDENTIALS',
+        payload: {
+          url: window.location.hostname,
+          username: usernameInput.value,
+          password: passwordInput.value
+        }
+      });
+    } else {
+      console.warn("Content script: Extension context invalidated, cannot send SAVE_CREDENTIALS message.");
+    }
   }
 }
 
