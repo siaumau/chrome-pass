@@ -35,25 +35,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
-// 监听表单提交以保存凭据
-document.addEventListener('submit', (e) => {
-  const form = e.target;
-  const passwordInput = form.querySelector('input[type="password"]');
+function findCredentialsAndSave(container) {
+  if (!container) return;
 
-  // 必须有密码字段，并且有值
+  const passwordInput = container.querySelector('input[type="password"]');
   if (!passwordInput || !passwordInput.value) {
     return;
   }
 
-  const textInputs = Array.from(form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]'));
+  const textInputs = Array.from(container.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]'));
   
-  // 过滤掉可能是验证码的输入框
   const verificationKeywords = ['code', 'otp', 'captcha', 'verify'];
   const potentialUserInputs = textInputs.filter(input => {
-    // 排除密码字段本身（如果它的type是text）
     if (input === passwordInput) return false;
-    
-    // 检查常见属性
     const name = (input.name || '').toLowerCase();
     const id = (input.id || '').toLowerCase();
     const autocomplete = (input.autocomplete || '').toLowerCase();
@@ -64,24 +58,55 @@ document.addEventListener('submit', (e) => {
   });
 
   let usernameInput;
-  // 如果过滤后只剩一个，那么它很可能就是用户名字段
   if (potentialUserInputs.length === 1) {
     usernameInput = potentialUserInputs[0];
   } else if (potentialUserInputs.length > 1) {
-    // 如果有多个，这是一个更复杂的场景。作为一个简单的备用方案，
-    // 我们可以选择第一个非空的输入框。
     usernameInput = potentialUserInputs.find(input => input.value);
   }
 
   if (usernameInput && usernameInput.value) {
-    // 发现登录行为，发送消息到 background script
     chrome.runtime.sendMessage({
       type: 'SAVE_CREDENTIALS',
       payload: {
-        url: window.location.hostname, // 使用 hostname 作为 key
+        url: window.location.hostname,
         username: usernameInput.value,
         password: passwordInput.value
       }
     });
   }
-}, true); // 使用捕获阶段以确保在页面自己的脚本之前运行
+}
+
+// 监听表单提交以保存凭据
+document.addEventListener('submit', (e) => {
+  findCredentialsAndSave(e.target);
+}, true);
+
+// 监听点击事件，以捕捉由JS处理的登录
+document.addEventListener('click', (e) => {
+    const target = e.target;
+    // Basic check if the clicked element could be a login button
+    const isLoginButton = (
+        (target.tagName === 'BUTTON' && (target.type === 'submit' || target.type === 'button')) ||
+        (target.tagName === 'INPUT' && (target.type === 'submit' || target.type === 'button'))
+    ) && (target.innerText.includes('登录') || target.value.includes('登录') || target.innerText.includes('Sign in'));
+
+    if (isLoginButton) {
+        // Find the closest form or a common ancestor div
+        const form = target.closest('form');
+        if (form) {
+          // If it's inside a form, the 'submit' event should handle it.
+          // We can still try to find credentials here as a fallback.
+          setTimeout(() => findCredentialsAndSave(form), 100);
+        } else {
+            // If not in a form, find a reasonable ancestor container
+            let ancestor = target.parentElement;
+            for (let i = 0; i < 5; i++) { // Check up to 5 levels up
+                if (ancestor && ancestor.querySelector('input[type="password"]')) {
+                    findCredentialsAndSave(ancestor);
+                    return;
+                }
+                if (ancestor) ancestor = ancestor.parentElement;
+            }
+        }
+    }
+}, true);

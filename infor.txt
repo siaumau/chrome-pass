@@ -1,0 +1,30 @@
+<div id="accountshow" style="display: block;">
+				<div id="tip" class="login-tip"></div>
+				<ul data-dashlane-rid="92739300080c021d" data-dashlane-classification="login" data-dashlane-captcha="true">
+					<li class="login-username"><input type="text" name="username" id="username" autocomplete="off" data-dashlane-rid="b4b536bf6f1844a5" data-dashlane-classification="username" data-kwimpalastatus="alive" data-kwimpalaid="1768969736257-0"> <span id="username-default-tip" class="default-tip" style="color: rgb(204, 204, 204);">用户名</span></li>
+					<li class="login-password"><input type="password" name="password" id="password" autocomplete="off" data-dashlane-rid="973853492bd3d18f" data-dashlane-classification="password" data-kwimpalastatus="alive" data-kwimpalaid="1768969736257-1"> <span id="password-default-tip" class="default-tip">密码</span> 
+								<input type="hidden" name="usbKeyId" id="usbKeyId"></li>
+					
+					<!--  
+					<li class="login-remember">
+					<label for="rememberMe"> <input
+							type="checkbox" id="rememberMe" name="rememberMe" value="true" />
+							记住我
+					</label>
+					<a href="http://epcfs.liugong.com:801/liugongsbomfile/download/usbkey/usbkey.zip">USBKEY 安装指南</a>
+					</li>
+				 	 -->
+				 	 
+					<li>
+						<span class="STYLE1">验证码：</span>
+						
+							<input name="checkcode" type="text" id="checkcode" style="width: 60px;height:20px;" value="" datatype="0,is_noquotation,4" data-dashlane-rid="205b0831cafa9472" data-dashlane-classification="other">&nbsp; 
+							<img id="checkCodeImg1" src="/account/getcheckcode?ddd=Wed Jan 21 2026 12:28:57 GMT+0800 (台北標準時間)" onclick="refreshCode();"> 
+							<span id="timer" style="color:red">50</span>							
+						 
+					</li>
+					<li>	
+						<input class="btn-login" style="width: 100px" id="toSubmit" type="button" value="登录" data-dashlane-rid="81329d6732f579a5" data-dashlane-classification="action,login" data-kwimpalastatus="dead">
+						</li>
+					</ul>
+				</div>

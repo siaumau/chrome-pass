@@ -1,58 +1,190 @@
-// 监听来自 popup.js 和 content.js 的消息
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === 'FILL_REQUEST') {
-    const { url } = request.payload;
+// Import the encryption library
+try {
+  importScripts('crypto-js.js');
+} catch (e) {
+  console.error('Failed to import crypto-js.js', e);
+}
 
-    // 1. 从 storage 获取凭据
-    chrome.storage.local.get(url, (result) => {
-      if (result[url]) {
-        const { username, password } = result[url];
+// --- Encryption and Decryption Helpers ---
 
-        // 2. 获取当前活动的标签页
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs.length > 0) {
-            const tabId = tabs[0].id;
-            
-            // 3. 向 content.js 发送填充消息
-            chrome.tabs.sendMessage(
-              tabId,
-              {
-                type: 'FILL_CREDENTIALS',
-                payload: { username, password }
-              },
-              (response) => {
-                if (chrome.runtime.lastError) {
-                  // 如果 content script 没有准备好，可能会发生错误
-                  console.error('发送消息失败:', chrome.runtime.lastError.message);
-                  sendResponse({ status: 'error', message: chrome.runtime.lastError.message });
-                } else {
-                  console.log('收到来自 content script 的响应:', response);
-                  sendResponse(response);
-                }
-              }
-            );
-          } else {
-            console.error('找不到活动的标签页。');
-            sendResponse({ status: 'error', message: '找不到活动的标签页' });
-          }
-        });
+function encrypt(data, key) {
+  if (typeof CryptoJS === 'undefined') {
+    console.error("BG: CryptoJS library is not loaded. Cannot encrypt.");
+    return null;
+  }
+  if (!key) return null;
+  try {
+    const encrypted = CryptoJS.AES.encrypt(data, key).toString();
+    // Add a prefix to distinguish encrypted passwords
+    return "enc::" + encrypted;
+  } catch (e) {
+    console.error("BG: Encryption failed:", e);
+    return null;
+  }
+}
+
+function decrypt(encryptedData, key) {
+  if (typeof CryptoJS === 'undefined') {
+    console.error("BG: CryptoJS library is not loaded. Cannot decrypt.");
+    return null;
+  }
+  if (!key || !encryptedData) { // Added check for !encryptedData
+    return encryptedData; // If no key or no data, return as is.
+  }
+  if (!encryptedData.startsWith("enc::")) {
+    console.warn("BG: Attempted to decrypt non-prefixed data. Assuming it's unencrypted or already decrypted.");
+    return encryptedData; // Not encrypted with our prefix, return original
+  }
+  try {
+    const ciphertext = encryptedData.substring(5); // Remove "enc::" prefix
+    const bytes = CryptoJS.AES.decrypt(ciphertext, key);
+    const originalText = bytes.toString(CryptoJS.enc.Utf8);
+    if (!originalText) {
+      throw new Error("Decryption resulted in empty string, likely wrong key or corrupt data.");
+    }
+    return originalText;
+  } catch (e) {
+    console.error("BG: Decryption failed:", e);
+    return null; // Return null on failure
+  }
+}
+
+// Helper to promisify chrome.storage.local.get
+const getLocalStorage = (keys) => {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(keys, resolve);
+  });
+};
+
+// Helper to promisify chrome.storage.local.set
+const setLocalStorage = (data) => {
+  return new Promise((resolve) => {
+    chrome.storage.local.set(data, resolve);
+  });
+};
+
+// Helper to promisify chrome.storage.session.get
+const getSessionStorage = (keys) => {
+  return new Promise((resolve) => {
+    chrome.storage.session.get(keys, resolve);
+  });
+};
+
+// Helper to promisify chrome.tabs.query
+const queryTabs = (queryInfo) => {
+  return new Promise((resolve) => {
+    chrome.tabs.query(queryInfo, resolve);
+  });
+};
+
+// Helper to promisify chrome.tabs.sendMessage
+const sendMessageToTab = (tabId, message) => {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
       } else {
-        console.error(`在 storage 中找不到 ${url} 的凭据。`);
-        sendResponse({ status: 'error', message: '找不到凭据' });
+        resolve(response);
       }
     });
+  });
+};
 
-    // 返回 true 表示我们将异步发送响应
-    return true;
+// Listen for messages from popup.js and content.js
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+  if (request.type === 'FILL_REQUEST') {
+    console.log('BG: Received FILL_REQUEST:', request.payload.url);
+    const { url } = request.payload;
+
+    try {
+      const { masterPassword } = await getSessionStorage('masterPassword');
+      if (!masterPassword) {
+        console.log('BG: Master password not set. Sending error response.');
+        sendResponse({ status: 'error', message: 'Master password is not set in this session.' });
+        return true; // Indicate async response
+      }
+      console.log('BG: Master password retrieved.');
+
+      const storedResult = await getLocalStorage(url);
+      if (!storedResult[url]) {
+        console.log('BG: No credentials found for URL. Sending error response.');
+        sendResponse({ status: 'error', message: `No credentials found for ${url}.` });
+        return true; // Indicate async response
+      }
+      console.log('BG: Credentials found for URL.');
+
+      let { username, password } = storedResult[url];
+
+      // Decrypt the password
+      const decryptedPassword = decrypt(password, masterPassword);
+      console.log('BG: Decryption attempted. Result:', decryptedPassword ? 'success' : 'failed');
+
+      if (!decryptedPassword || decryptedPassword === password) { 
+        console.log('BG: Decryption failed or returned original password. Sending error response.');
+        sendResponse({ status: 'error', message: 'Decryption failed. Is the master password correct for this entry?' });
+        return true; // Indicate async response
+      }
+      password = decryptedPassword;
+      console.log('BG: Password successfully decrypted.');
+
+      const tabs = await queryTabs({ active: true, currentWindow: true });
+      if (tabs.length === 0) {
+        console.log('BG: No active tab found. Sending error response.');
+        sendResponse({ status: 'error', message: 'No active tab found.' });
+        return true; // Indicate async response
+      }
+      const tabId = tabs[0].id;
+      console.log('BG: Active tab found:', tabId);
+
+      try {
+        console.log('BG: Sending FILL_CREDENTIALS to content script...');
+        const contentResponse = await sendMessageToTab(tabId, { type: 'FILL_CREDENTIALS', payload: { username, password } });
+        console.log('BG: Content script response:', contentResponse); // New log
+        console.log('BG: Received response from content script. Relaying to popup.');
+        sendResponse(contentResponse);
+      } catch (contentError) {
+        console.error('BG: Error sending message to content script:', contentError);
+        sendResponse({ status: 'error', message: `Failed to fill: ${contentError.message || 'Content script not responsive.'}` });
+      }
+
+    } catch (e) {
+      console.error('BG: Unhandled error during FILL_REQUEST:', e);
+      sendResponse({ status: 'error', message: e.message || 'An unknown error occurred during fill operation.' });
+    }
+    console.log('BG: FILL_REQUEST handler ending. Returning true.');
+    return true; // Indicate that sendResponse will be called asynchronously
+  
   } else if (request.type === 'SAVE_CREDENTIALS') {
+    console.log('BG: Received SAVE_CREDENTIALS request.');
     const { url, username, password } = request.payload;
-    const data = { [url]: { username, password } };
-    
-    // 保存到 chrome.storage
-    chrome.storage.local.set(data, () => {
-      console.log(`凭据已为 ${url} 保存。`);
-      // 可以选择发送一个桌面通知来提示用户
-      // chrome.notifications.create(...)
-    });
+
+    try {
+      const { masterPassword } = await getSessionStorage('masterPassword');
+      if (!masterPassword) {
+        console.warn("BG: Attempted to save credentials but master password is not set. Saving unencrypted.");
+        const unencryptedData = { [url]: { username, password } };
+        await setLocalStorage(unencryptedData);
+        return false; // No async response needed for save for now
+      }
+
+      // Encrypt the password
+      const encryptedPassword = encrypt(password, masterPassword);
+
+      if (!encryptedPassword) {
+        console.error("BG: Failed to encrypt password. Credentials not saved.");
+        return false;
+      }
+
+      const dataToSave = { [url]: { username, password: encryptedPassword } };
+      await setLocalStorage(dataToSave);
+      console.log(`BG: Credentials saved and encrypted for ${url}.`);
+
+    } catch (e) {
+      console.error('BG: Unhandled error during SAVE_CREDENTIALS:', e);
+    }
+    console.log('BG: SAVE_CREDENTIALS handler ending. Returning false.');
+    return false; // No async response expected/required for SAVE_CREDENTIALS for now.
   }
+  console.log('BG: Unhandled message type:', request.type);
+  return false; // For any unhandled message types, no async response.
 });
