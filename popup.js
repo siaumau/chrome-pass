@@ -78,4 +78,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
+
+  const exportButton = document.getElementById('export-button');
+  exportButton.addEventListener('click', () => {
+    chrome.storage.local.get(null, (items) => {
+      if (Object.keys(items).length === 0) {
+        alert('没有密码可以汇出。');
+        return;
+      }
+      const dataStr = JSON.stringify(items, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'passwords.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  });
 });
