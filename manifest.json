@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "简易密码管理器",
+  "name": "__MSG_extName__",
+  "default_locale": "en",
   "version": "1.0",
-  "description": "一个简单的密码管理器，用于保存和填充网站的登录凭据。",
+  "description": "__MSG_extDesc__",
   "permissions": [
     "storage",
     "activeTab",

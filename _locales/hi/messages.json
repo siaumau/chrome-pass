@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "सरल पासवर्ड प्रबंधक",
+    "description": "The name of the extension."
+  },
+  "extDesc": {
+    "message": "वेबसाइटों के लिए लॉगिन क्रेडेंशियल्स को सहेजने और भरने के लिए एक सरल पासवर्ड प्रबंधक।",
+    "description": "The description of the extension."
+  }
+}

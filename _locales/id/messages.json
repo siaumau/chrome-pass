@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Manajer Kata Sandi Sederhana",
+    "description": "The name of the extension."
+  },
+  "extDesc": {
+    "message": "Manajer kata sandi sederhana untuk menyimpan dan mengisi kredensial login untuk situs web.",
+    "description": "The description of the extension."
+  }
+}

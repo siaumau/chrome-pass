@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Trình quản lý mật khẩu đơn giản",
+    "description": "The name of the extension."
+  },
+  "extDesc": {
+    "message": "Một trình quản lý mật khẩu đơn giản để lưu và điền thông tin đăng nhập cho các trang web.",
+    "description": "The description of the extension."
+  }
+}

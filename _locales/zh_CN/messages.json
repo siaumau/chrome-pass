@@ -1,0 +1,38 @@
+{
+  "extName": {
+    "message": "简易密码管理器",
+    "description": "扩展程序的名称。"
+  },
+  "extDesc": {
+    "message": "一个简单的密码管理器，用于保存和填充网站的登录凭据。",
+    "description": "扩展程序的描述。"
+  },
+  "popupTitle": {
+    "message": "本地安全密码管理器",
+    "description": "弹出窗口的标题。"
+  },
+  "exportButton": {
+    "message": "导出",
+    "description": "导出按钮上的文本。"
+  },
+  "noPasswords": {
+    "message": "尚未保存任何密码。",
+    "description": "没有密码时显示的消息。"
+  },
+  "usernameLabel": {
+    "message": "用户名：",
+    "description": "用户名的标签。"
+  },
+  "fillButton": {
+    "message": "填充",
+    "description": "填充按钮上的文本。"
+  },
+  "deleteButton": {
+    "message": "删除",
+    "description": "删除按钮上的文本。"
+  },
+  "exportAlert": {
+    "message": "没有密码可以导出。",
+    "description": "没有可导出的密码时的警报消息。"
+  }
+}

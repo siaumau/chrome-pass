@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "シンプルなパスワードマネージャー",
+    "description": "The name of the extension."
+  },
+  "extDesc": {
+    "message": "ウェブサイトのログイン情報を保存し、入力するためのシンプルなパスワードマネージャーです。",
+    "description": "The description of the extension."
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "extName": {
+    "message": "Simple Password Manager",
+    "description": "The name of the extension."
+  },
+  "extDesc": {
+    "message": "A simple password manager to save and fill login credentials for websites.",
+    "description": "The description of the extension."
+  },
+  "popupTitle": {
+    "message": "Local Secure Password Manager",
+    "description": "The title of the popup window."
+  },
+  "exportButton": {
+    "message": "Export",
+    "description": "The text on the export button."
+  },
+  "noPasswords": {
+    "message": "No passwords saved yet.",
+    "description": "The message shown when there are no passwords."
+  },
+  "usernameLabel": {
+    "message": "Username: ",
+    "description": "The label for the username."
+  },
+  "fillButton": {
+    "message": "Fill",
+    "description": "The text on the fill button."
+  },
+  "deleteButton": {
+    "message": "Delete",
+    "description": "The text on the delete button."
+  },
+  "exportAlert": {
+    "message": "No passwords to export.",
+    "description": "The alert message when there are no passwords to export."
+  }
+}

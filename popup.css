@@ -1,32 +1,87 @@
+:root {
+  --primary-color: #007bff;
+  --danger-color: #dc3545;
+  --light-gray: #f8f9fa;
+  --gray: #6c757d;
+  --border-color: #dee2e6;
+  --text-color: #212529;
+}
+
 body {
-  font-family: Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   width: 400px;
-  padding: 10px;
-  background-color: #f9f9f9;
+  padding: 15px;
+  background-color: #fff;
+  color: var(--text-color);
 }
 
 .header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #ddd;
-  padding-bottom: 5px;
-  margin-bottom: 10px;
-}
-
-#export-button {
-  background-color: #28a745;
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  cursor: pointer;
-  border-radius: 3px;
+  text-align: center;
+  margin-bottom: 15px;
 }
 
 h1 {
-  font-size: 18px;
+  font-size: 20px;
   margin: 0;
-  color: #333;
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+.language-switcher {
+  display: flex;
+  align-items: center;
+  background-color: var(--light-gray);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 5px;
+}
+
+.language-switcher svg {
+  stroke: var(--gray);
+  margin-right: 5px;
+}
+
+#language-select {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+#language-select:focus {
+  outline: none;
+}
+
+.control-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.control-button:hover {
+  background-color: #0056b3;
+}
+
+.control-button svg {
+  stroke: white;
 }
 
 ul {
@@ -36,47 +91,66 @@ ul {
 }
 
 li {
-  padding: 10px;
-  border-bottom: 1px solid #eee;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-li:last-child {
-  border-bottom: none;
+  margin-bottom: 10px;
 }
 
 .credential-info {
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 
 .credential-info .url {
-  font-weight: bold;
-  color: #007bff;
-  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: 15px;
 }
 
 .credential-info .username {
-  color: #555;
-  font-size: 12px;
+  color: var(--gray);
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
 }
 
 .actions button {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background-color: var(--light-gray);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  padding: 6px 10px;
   cursor: pointer;
-  border-radius: 3px;
-  margin-left: 5px;
-}
-
-.actions button.delete {
-    background-color: #dc3545;
+  border-radius: 5px;
+  font-size: 12px;
+  transition: background-color 0.2s;
 }
 
 .actions button:hover {
-  opacity: 0.9;
+  background-color: #e9ecef;
+}
+
+.actions button.delete {
+    background-color: var(--danger-color);
+    border-color: var(--danger-color);
+    color: white;
+}
+
+.actions button.delete:hover {
+    background-color: #c82333;
+}
+
+.actions button svg {
+    stroke: currentColor;
 }

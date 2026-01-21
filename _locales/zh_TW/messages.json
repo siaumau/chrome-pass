@@ -1,0 +1,38 @@
+{
+  "extName": {
+    "message": "簡易密碼管理器",
+    "description": "擴充功能的名稱。"
+  },
+  "extDesc": {
+    "message": "一個簡單的密碼管理器，用於儲存和填入網站的登入憑證。",
+    "description": "擴充功能的描述。"
+  },
+  "popupTitle": {
+    "message": "本地安全密碼管理器",
+    "description": "彈出視窗的標題。"
+  },
+  "exportButton": {
+    "message": "匯出",
+    "description": "匯出按鈕上的文字。"
+  },
+  "noPasswords": {
+    "message": "尚未儲存任何密碼。",
+    "description": "沒有密碼時顯示的訊息。"
+  },
+  "usernameLabel": {
+    "message": "使用者名稱：",
+    "description": "使用者名稱的標籤。"
+  },
+  "fillButton": {
+    "message": "填入",
+    "description": "填入按鈕上的文字。"
+  },
+  "deleteButton": {
+    "message": "刪除",
+    "description": "刪除按鈕上的文字。"
+  },
+  "exportAlert": {
+    "message": "沒有密碼可以匯出。",
+    "description": "沒有可匯出的密碼時的警示訊息。"
+  }
+}
