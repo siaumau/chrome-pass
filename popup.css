@@ -1,0 +1,71 @@
+body {
+  font-family: Arial, sans-serif;
+  width: 400px;
+  padding: 10px;
+  background-color: #f9f9f9;
+}
+
+.header {
+  text-align: center;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0;
+  color: #333;
+}
+
+ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+li {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+li:last-child {
+  border-bottom: none;
+}
+
+.credential-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.credential-info .url {
+  font-weight: bold;
+  color: #007bff;
+  font-size: 14px;
+}
+
+.credential-info .username {
+  color: #555;
+  font-size: 12px;
+}
+
+.actions button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  margin-left: 5px;
+}
+
+.actions button.delete {
+    background-color: #dc3545;
+}
+
+.actions button:hover {
+  opacity: 0.9;
+}
