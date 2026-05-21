@@ -84,6 +84,64 @@ h1 {
   stroke: white;
 }
 
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--light-gray);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+
+.search-bar svg { stroke: var(--gray); flex-shrink: 0; }
+
+#search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-color);
+  padding: 4px 0;
+}
+
+.url-group {
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.url-group .url-header {
+  padding: 8px 12px;
+  background: var(--light-gray);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.url-group .entry-row {
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.url-group .entry-row:last-child { border-bottom: none; }
+
+.url-group .entry-row .username {
+  color: var(--text-color);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
 ul {
   list-style-type: none;
   padding: 0;

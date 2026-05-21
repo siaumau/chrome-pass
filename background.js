@@ -5,198 +5,225 @@ try {
   console.error('Failed to import crypto-js.js', e);
 }
 
-// --- Encryption and Decryption Helpers ---
-
+// --- Encryption helpers ---
 function encrypt(data, key) {
-  if (typeof CryptoJS === 'undefined') {
-    console.error("BG: CryptoJS library is not loaded. Cannot encrypt.");
-    return null;
-  }
-  if (!key) return null;
+  if (typeof CryptoJS === 'undefined' || !key) return null;
   try {
-    const encrypted = CryptoJS.AES.encrypt(data, key).toString();
-    // Add a prefix to distinguish encrypted passwords
-    return "enc::" + encrypted;
+    return 'enc::' + CryptoJS.AES.encrypt(data, key).toString();
   } catch (e) {
-    console.error("BG: Encryption failed:", e);
+    console.error('BG: Encryption failed:', e);
     return null;
   }
 }
 
 function decrypt(encryptedData, key) {
-  if (typeof CryptoJS === 'undefined') {
-    console.error("BG: CryptoJS library is not loaded. Cannot decrypt.");
-    return null;
-  }
-  if (!key || !encryptedData) { // Added check for !encryptedData
-    return encryptedData; // If no key or no data, return as is.
-  }
-  if (!encryptedData.startsWith("enc::")) {
-    console.warn("BG: Attempted to decrypt non-prefixed data. Assuming it's unencrypted or already decrypted.");
-    return encryptedData; // Not encrypted with our prefix, return original
-  }
+  if (typeof CryptoJS === 'undefined' || !key || !encryptedData) return null;
+  if (!encryptedData.startsWith('enc::')) return encryptedData;
   try {
-    const ciphertext = encryptedData.substring(5); // Remove "enc::" prefix
+    const ciphertext = encryptedData.substring(5);
     const bytes = CryptoJS.AES.decrypt(ciphertext, key);
     const originalText = bytes.toString(CryptoJS.enc.Utf8);
-    if (!originalText) {
-      throw new Error("Decryption resulted in empty string, likely wrong key or corrupt data.");
-    }
+    if (!originalText) throw new Error('Empty result — likely wrong key.');
     return originalText;
   } catch (e) {
-    console.error("BG: Decryption failed:", e);
-    return null; // Return null on failure
+    console.error('BG: Decryption failed:', e);
+    return null;
   }
 }
 
-// Helper to promisify chrome.storage.local.get
-const getLocalStorage = (keys) => {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(keys, resolve);
+// --- Storage helpers ---
+const getLocalStorage = (keys) => new Promise((r) => chrome.storage.local.get(keys, r));
+const setLocalStorage = (data) => new Promise((r) => chrome.storage.local.set(data, r));
+const removeLocalStorage = (keys) => new Promise((r) => chrome.storage.local.remove(keys, r));
+const getSessionStorage = (keys) => new Promise((r) => chrome.storage.session.get(keys, r));
+const setSessionStorage = (data) => new Promise((r) => chrome.storage.session.set(data, r));
+const queryTabs = (q) => new Promise((r) => chrome.tabs.query(q, r));
+const sendMessageToTab = (tabId, msg) => new Promise((res, rej) => {
+  chrome.tabs.sendMessage(tabId, msg, (response) => {
+    if (chrome.runtime.lastError) rej(chrome.runtime.lastError);
+    else res(response);
   });
-};
+});
 
-// Helper to promisify chrome.storage.local.set
-const setLocalStorage = (data) => {
-  return new Promise((resolve) => {
-    chrome.storage.local.set(data, resolve);
-  });
-};
+const RESERVED_KEYS = new Set(['userLanguage']);
 
-// Helper to promisify chrome.storage.session.get
-const getSessionStorage = (keys) => {
-  return new Promise((resolve) => {
-    chrome.storage.session.get(keys, resolve);
-  });
-};
+function isCredentialKey(key) {
+  return !RESERVED_KEYS.has(key);
+}
 
-// Helper to promisify chrome.tabs.query
-const queryTabs = (queryInfo) => {
-  return new Promise((resolve) => {
-    chrome.tabs.query(queryInfo, resolve);
-  });
-};
-
-// Helper to promisify chrome.tabs.sendMessage
-const sendMessageToTab = (tabId, message) => {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tabId, message, (response) => {
-      if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
-      } else {
-        resolve(response);
-      }
-    });
-  });
-};
-
-// Helper function to check if a URL is a restricted Chrome URL
 function isRestrictedURL(url) {
-  return url.startsWith('chrome://') || url.startsWith('about:') || url.startsWith('view-source:');
+  return !url || url.startsWith('chrome://') || url.startsWith('about:') || url.startsWith('view-source:');
 }
 
-// Listen for messages from popup.js and content.js
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
-  if (request.type === 'FILL_REQUEST') {
-    console.log('BG: Received FILL_REQUEST:', request.payload.url);
-    const { url } = request.payload;
+function newId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+}
 
-    try {
-      const { masterPassword } = await getSessionStorage('masterPassword');
-      if (!masterPassword) {
-        console.log('BG: Master password not set. Sending error response.');
-        sendResponse({ status: 'error', message: 'Master password is not set in this session.' });
-        return true; // Indicate async response
-      }
-      console.log('BG: Master password retrieved.');
-
-      const storedResult = await getLocalStorage(url);
-      if (!storedResult[url]) {
-        console.log('BG: No credentials found for URL. Sending error response.');
-        sendResponse({ status: 'error', message: `No credentials found for ${url}.` });
-        return true; // Indicate async response
-      }
-      console.log('BG: Credentials found for URL.');
-
-      let { username, password } = storedResult[url];
-
-      // Decrypt the password
-      const decryptedPassword = decrypt(password, masterPassword);
-      console.log('BG: Decryption attempted. Result:', decryptedPassword ? 'success' : 'failed');
-
-      if (!decryptedPassword || decryptedPassword === password) { 
-        console.log('BG: Decryption failed or returned original password. Sending error response.');
-        sendResponse({ status: 'error', message: 'Decryption failed. Is the master password correct for this entry?' });
-        return true; // Indicate async response
-      }
-      password = decryptedPassword;
-      console.log('BG: Password successfully decrypted.');
-
-      const tabs = await queryTabs({ active: true, currentWindow: true });
-      if (tabs.length === 0) {
-        console.log('BG: No active tab found. Sending error response.');
-        sendResponse({ status: 'error', message: 'No active tab found.' });
-        return true; // Indicate async response
-      }
-      const tabId = tabs[0].id;
-      const tabUrl = tabs[0].url; // Get the tab's URL
-      console.log('BG: Active tab found:', tabId, 'URL:', tabUrl);
-
-      if (isRestrictedURL(tabUrl)) {
-        console.log('BG: Cannot fill on restricted URL. Sending error response.');
-        sendResponse({ status: 'error', message: 'Cannot fill passwords on special browser pages (e.g., chrome://, about:, view-source:).' });
-        return true; // Indicate async response
-      }
-
-      try {
-        console.log('BG: Sending FILL_CREDENTIALS to content script...');
-        const contentResponse = await sendMessageToTab(tabId, { type: 'FILL_CREDENTIALS', payload: { username, password } });
-        console.log('BG: Content script response:', contentResponse); // New log
-        console.log('BG: Received response from content script. Relaying to popup.');
-        sendResponse(contentResponse);
-      } catch (contentError) {
-        console.error('BG: Error sending message to content script:', contentError);
-        sendResponse({ status: 'error', message: `Failed to fill: ${contentError.message || 'Content script not responsive.'}` });
-      }
-
-    } catch (e) {
-      console.error('BG: Unhandled error during FILL_REQUEST:', e);
-      sendResponse({ status: 'error', message: e.message || 'An unknown error occurred during fill operation.' });
+// Migrate legacy single-entry shape {url: {username, password}} to array shape.
+async function migrateStorageIfNeeded() {
+  const all = await getLocalStorage(null);
+  const updates = {};
+  let dirty = false;
+  for (const key in all) {
+    if (!isCredentialKey(key)) continue;
+    const value = all[key];
+    if (Array.isArray(value)) continue;
+    if (value && typeof value === 'object' && 'username' in value && 'password' in value) {
+      updates[key] = [{
+        id: newId(),
+        username: value.username,
+        password: value.password,
+        label: '',
+        createdAt: Date.now()
+      }];
+      dirty = true;
     }
-    console.log('BG: FILL_REQUEST handler ending. Returning true.');
-    return true; // Indicate that sendResponse will be called asynchronously
-  
-  } else if (request.type === 'SAVE_CREDENTIALS') {
-    console.log('BG: Received SAVE_CREDENTIALS request.');
-    const { url, username, password } = request.payload;
-
-    try {
-      const { masterPassword } = await getSessionStorage('masterPassword');
-      if (!masterPassword) {
-        console.warn("BG: Attempted to save credentials but master password is not set. Saving unencrypted.");
-        const unencryptedData = { [url]: { username, password } };
-        await setLocalStorage(unencryptedData);
-        return false; // No async response needed for save for now
-      }
-
-      // Encrypt the password
-      const encryptedPassword = encrypt(password, masterPassword);
-
-      if (!encryptedPassword) {
-        console.error("BG: Failed to encrypt password. Credentials not saved.");
-        return false;
-      }
-
-      const dataToSave = { [url]: { username, password: encryptedPassword } };
-      await setLocalStorage(dataToSave);
-      console.log(`BG: Credentials saved and encrypted for ${url}.`);
-
-    } catch (e) {
-      console.error('BG: Unhandled error during SAVE_CREDENTIALS:', e);
-    }
-    console.log('BG: SAVE_CREDENTIALS handler ending. Returning false.');
-    return false; // No async response expected/required for SAVE_CREDENTIALS for now.
   }
-  console.log('BG: Unhandled message type:', request.type);
-  return false; // For any unhandled message types, no async response.
+  if (dirty) {
+    await setLocalStorage(updates);
+    console.log('BG: Migrated', Object.keys(updates).length, 'legacy entries to array shape.');
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => { migrateStorageIfNeeded(); });
+chrome.runtime.onStartup.addListener(() => { migrateStorageIfNeeded(); });
+
+// Always returns an array (possibly empty) for the given URL.
+async function getEntriesForUrl(url) {
+  const result = await getLocalStorage(url);
+  const value = result[url];
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object' && 'username' in value) {
+    const migrated = [{
+      id: newId(),
+      username: value.username,
+      password: value.password,
+      label: '',
+      createdAt: Date.now()
+    }];
+    await setLocalStorage({ [url]: migrated });
+    return migrated;
+  }
+  return [];
+}
+
+// --- Handlers (return promise; sendResponse wired at bottom) ---
+
+async function handleUnlock(payload) {
+  const { masterPassword } = payload || {};
+  if (!masterPassword) return { status: 'error', message: 'Empty master password.' };
+  await setSessionStorage({ masterPassword });
+  return { status: 'success' };
+}
+
+async function handleCheckUnlocked() {
+  const { masterPassword } = await getSessionStorage('masterPassword');
+  return { status: 'success', unlocked: !!masterPassword };
+}
+
+// Returns metadata only (no passwords) — content script never needs to see them.
+async function handleListEntries(payload) {
+  const { url } = payload || {};
+  const { masterPassword } = await getSessionStorage('masterPassword');
+  const entries = await getEntriesForUrl(url);
+  return {
+    status: 'success',
+    unlocked: !!masterPassword,
+    entries: entries.map((e) => ({ id: e.id, username: e.username, label: e.label || '' }))
+  };
+}
+
+async function handleSaveFromPage(payload) {
+  const { url, username, password, label } = payload || {};
+  if (!url || !username || !password) {
+    return { status: 'error', message: 'Missing url/username/password.' };
+  }
+  const { masterPassword } = await getSessionStorage('masterPassword');
+  if (!masterPassword) return { status: 'error', message: 'Locked.' };
+
+  const encrypted = encrypt(password, masterPassword);
+  if (!encrypted) return { status: 'error', message: 'Encryption failed.' };
+
+  const entries = await getEntriesForUrl(url);
+  // If an entry with the same username already exists, update its password instead of duplicating.
+  const existingIdx = entries.findIndex((e) => e.username === username);
+  if (existingIdx >= 0) {
+    entries[existingIdx] = { ...entries[existingIdx], password: encrypted, label: label || entries[existingIdx].label || '' };
+  } else {
+    entries.push({ id: newId(), username, password: encrypted, label: label || '', createdAt: Date.now() });
+  }
+  await setLocalStorage({ [url]: entries });
+  return { status: 'success', updated: existingIdx >= 0 };
+}
+
+async function handleDeleteEntry(payload) {
+  const { url, entryId } = payload || {};
+  const entries = await getEntriesForUrl(url);
+  const remaining = entries.filter((e) => e.id !== entryId);
+  if (remaining.length === 0) {
+    await removeLocalStorage(url);
+  } else {
+    await setLocalStorage({ [url]: remaining });
+  }
+  return { status: 'success' };
+}
+
+// Returns decrypted credentials to the caller (used by the in-page mini popup).
+async function handleGetDecrypted(payload) {
+  const { url, entryId } = payload || {};
+  const { masterPassword } = await getSessionStorage('masterPassword');
+  if (!masterPassword) return { status: 'error', message: 'Locked.' };
+
+  const entries = await getEntriesForUrl(url);
+  const entry = entries.find((e) => e.id === entryId);
+  if (!entry) return { status: 'error', message: 'Entry not found.' };
+
+  const decryptedPassword = decrypt(entry.password, masterPassword);
+  if (!decryptedPassword) return { status: 'error', message: 'Decryption failed.' };
+  return { status: 'success', username: entry.username, password: decryptedPassword };
+}
+
+// Fill via the active tab (used by popup's "Fill" button).
+async function handleFillRequest(payload) {
+  const { url, entryId } = payload || {};
+  const decrypted = await handleGetDecrypted({ url, entryId });
+  if (decrypted.status !== 'success') return decrypted;
+
+  const tabs = await queryTabs({ active: true, currentWindow: true });
+  if (tabs.length === 0) return { status: 'error', message: 'No active tab.' };
+  const tab = tabs[0];
+  if (isRestrictedURL(tab.url)) {
+    return { status: 'error', message: 'Cannot fill on restricted browser pages.' };
+  }
+  try {
+    const contentResponse = await sendMessageToTab(tab.id, {
+      type: 'FILL_CREDENTIALS',
+      payload: { username: decrypted.username, password: decrypted.password }
+    });
+    return contentResponse || { status: 'success' };
+  } catch (e) {
+    return { status: 'error', message: e.message || 'Content script not responsive.' };
+  }
+}
+
+// --- Message router ---
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  const route = async () => {
+    switch (request.type) {
+      case 'UNLOCK_REQUEST': return handleUnlock(request.payload);
+      case 'CHECK_UNLOCKED': return handleCheckUnlocked();
+      case 'LIST_ENTRIES': return handleListEntries(request.payload);
+      case 'SAVE_FROM_PAGE': return handleSaveFromPage(request.payload);
+      case 'DELETE_ENTRY': return handleDeleteEntry(request.payload);
+      case 'GET_DECRYPTED': return handleGetDecrypted(request.payload);
+      case 'FILL_REQUEST': return handleFillRequest(request.payload);
+      default: return { status: 'error', message: 'Unknown message type: ' + request.type };
+    }
+  };
+  route().then(sendResponse).catch((e) => {
+    console.error('BG: handler error', e);
+    sendResponse({ status: 'error', message: e.message || String(e) });
+  });
+  return true; // keep channel open for async response
 });
