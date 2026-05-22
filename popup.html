@@ -38,6 +38,7 @@
   </ul>
   <div class="master-password-section">
     <h2 id="master-password-title">主密码</h2>
+    <p id="master-password-hint" class="mp-hint"></p>
     <div class="master-password-controls">
       <input type="password" id="master-password-input" placeholder="输入您的主密码">
       <button id="save-master-password" class="control-button">
@@ -45,6 +46,10 @@
         <span class="button-text">保存密钥</span>
       </button>
     </div>
+    <div class="master-password-confirm-row">
+      <input type="password" id="master-password-confirm" placeholder="再次输入">
+    </div>
+    <p id="master-password-error" class="mp-error"></p>
   </div>
   <script src="popup.js"></script>
 </body>

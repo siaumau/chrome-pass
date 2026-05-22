@@ -10,6 +10,9 @@
       unlockTitle: 'Unlock to sign in',
       unlockPlaceholder: 'Master password',
       unlockButton: 'Unlock',
+      migrateHint: 'Encryption upgrade — enter your existing master password.',
+      setupRequired: 'Please open the extension popup to set up your master password first.',
+      wrongPassword: 'Wrong master password.',
       noEntries: 'No saved accounts for this site.',
       savedAccounts: 'Saved accounts',
       saveCurrent: 'Save this account',
@@ -24,6 +27,9 @@
       unlockTitle: '解锁以登录',
       unlockPlaceholder: '主密码',
       unlockButton: '解锁',
+      migrateHint: '加密升级 — 请输入您原本的主密码。',
+      setupRequired: '请先打开扩展弹窗设定主密码。',
+      wrongPassword: '主密码错误。',
       noEntries: '此网站尚无已储存的帐号。',
       savedAccounts: '已储存的帐号',
       saveCurrent: '储存此帐号',
@@ -38,6 +44,9 @@
       unlockTitle: '解鎖以登入',
       unlockPlaceholder: '主密碼',
       unlockButton: '解鎖',
+      migrateHint: '加密升級 — 請輸入您原本的主密碼。',
+      setupRequired: '請先開啟擴充功能彈窗設定主密碼。',
+      wrongPassword: '主密碼錯誤。',
       noEntries: '此網站尚無已儲存的帳號。',
       savedAccounts: '已儲存的帳號',
       saveCurrent: '儲存此帳號',
@@ -52,6 +61,9 @@
       unlockTitle: 'ロック解除してログイン',
       unlockPlaceholder: 'マスターパスワード',
       unlockButton: 'ロック解除',
+      migrateHint: '暗号化アップグレード — 既存のマスターパスワードを入力してください。',
+      setupRequired: '先に拡張機能のポップアップでマスターパスワードを設定してください。',
+      wrongPassword: 'マスターパスワードが違います。',
       noEntries: 'このサイトの保存済みアカウントはありません。',
       savedAccounts: '保存済みアカウント',
       saveCurrent: 'このアカウントを保存',
@@ -278,27 +290,38 @@
     body.className = 'body';
     root.appendChild(body);
 
-    const status = await sendBg({ type: 'LIST_ENTRIES', payload: { url: HOST_URL } });
-    if (!status || status.status !== 'success') {
+    const vaultState = await sendBg({ type: 'GET_VAULT_STATE' });
+    if (!vaultState || vaultState.status !== 'success') {
       const err = document.createElement('div');
       err.className = 'toast error';
-      err.textContent = (status && status.message) || 'Error';
+      err.textContent = (vaultState && vaultState.message) || 'Error';
       body.appendChild(err);
       return;
     }
 
-    if (!status.unlocked) {
-      renderUnlock(body);
-    } else {
-      renderEntries(body, status.entries);
+    if (vaultState.unlocked) {
+      const list = await sendBg({ type: 'LIST_ENTRIES', payload: { url: HOST_URL } });
+      const entries = (list && list.status === 'success') ? list.entries : [];
+      renderEntries(body, entries);
       renderSaveSection(body);
+    } else if (vaultState.state === 'setup') {
+      renderSetupRequired(body);
+    } else {
+      renderUnlock(body, vaultState.state);
     }
   }
 
-  function renderUnlock(body) {
+  function renderSetupRequired(body) {
     const hint = document.createElement('p');
     hint.className = 'hint';
-    hint.textContent = t.unlockTitle;
+    hint.textContent = t.setupRequired;
+    body.appendChild(hint);
+  }
+
+  function renderUnlock(body, state) {
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = state === 'migrate' ? t.migrateHint : t.unlockTitle;
     body.appendChild(hint);
 
     const row = document.createElement('div');
@@ -318,7 +341,9 @@
         input.value = '';
         await render();
       } else {
-        showToast((res && res.message) || 'Error', true);
+        const code = res && res.code;
+        const msg = code === 'WRONG_PASSWORD' ? t.wrongPassword : ((res && res.message) || 'Error');
+        showToast(msg, true);
       }
     };
     btn.addEventListener('click', submit);
