@@ -28,6 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
       errEmptyPassword: "Please enter a password.",
       errMigrationFailed: "Failed to migrate existing data. Please report this issue.",
       errGeneric: "Something went wrong. Please try again.",
+      errPasswordTooShort: "Master password must be at least 8 characters.",
+      strengthWeak: "Weak",
+      strengthFair: "Fair",
+      strengthGood: "Good",
+      strengthStrong: "Strong",
+      autoLockLabel: "Auto-lock after",
+      autoLockNever: "Never",
+      lockNowButton: "Lock now",
+      settingsTitle: "Settings",
+      autoLockUnit: "min",
       fillIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`,
       deleteIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`
     },
@@ -57,7 +67,17 @@ document.addEventListener('DOMContentLoaded', () => {
       errWrongPassword: "主密码错误。",
       errEmptyPassword: "请输入密码。",
       errMigrationFailed: "升级旧资料失败，请回报问题。",
-      errGeneric: "发生错误，请再试一次。"
+      errGeneric: "发生错误，请再试一次。",
+      errPasswordTooShort: "主密码至少需要 8 个字元。",
+      strengthWeak: "弱",
+      strengthFair: "普通",
+      strengthGood: "良好",
+      strengthStrong: "强",
+      autoLockLabel: "自动锁定",
+      autoLockNever: "永不",
+      lockNowButton: "立即锁定",
+      settingsTitle: "设定",
+      autoLockUnit: "分钟"
     },
     zh_TW: {
       popupTitle: "本地安全密碼管理器",
@@ -85,7 +105,17 @@ document.addEventListener('DOMContentLoaded', () => {
       errWrongPassword: "主密碼錯誤。",
       errEmptyPassword: "請輸入密碼。",
       errMigrationFailed: "升級舊資料失敗，請回報問題。",
-      errGeneric: "發生錯誤，請再試一次。"
+      errGeneric: "發生錯誤，請再試一次。",
+      errPasswordTooShort: "主密碼至少需要 8 個字元。",
+      strengthWeak: "弱",
+      strengthFair: "普通",
+      strengthGood: "良好",
+      strengthStrong: "強",
+      autoLockLabel: "自動鎖定",
+      autoLockNever: "永不",
+      lockNowButton: "立即鎖定",
+      settingsTitle: "設定",
+      autoLockUnit: "分鐘"
     },
     ja: {
       popupTitle: "ローカルセキュアパスワードマネージャー",
@@ -113,7 +143,17 @@ document.addEventListener('DOMContentLoaded', () => {
       errWrongPassword: "マスターパスワードが違います。",
       errEmptyPassword: "パスワードを入力してください。",
       errMigrationFailed: "既存データの移行に失敗しました。",
-      errGeneric: "エラーが発生しました。"
+      errGeneric: "エラーが発生しました。",
+      errPasswordTooShort: "マスターパスワードは 8 文字以上必要です。",
+      strengthWeak: "弱い",
+      strengthFair: "普通",
+      strengthGood: "良い",
+      strengthStrong: "強い",
+      autoLockLabel: "自動ロック",
+      autoLockNever: "なし",
+      lockNowButton: "今すぐロック",
+      settingsTitle: "設定",
+      autoLockUnit: "分"
     },
     ko: {
       popupTitle: "로컬 보안 비밀번호 관리자",
@@ -273,6 +313,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const masterPasswordSection = document.querySelector('.master-password-section');
   const searchInput = document.getElementById('search-input');
   const searchBar = document.querySelector('.search-bar');
+  const strengthBox = document.getElementById('master-password-strength');
+  const strengthLabel = strengthBox.querySelector('.strength-label');
+  const settingsButton = document.getElementById('settings-button');
+  const settingsPanel = document.getElementById('settings-panel');
+  const autoLockSelect = document.getElementById('auto-lock-select');
+  const autoLockLabel = document.getElementById('auto-lock-label');
+  const lockNowButton = document.getElementById('lock-now-button');
+
+  const MIN_MASTER_PASSWORD_LENGTH = 8;
 
   let currentLang = 'en';
   let searchQuery = '';
@@ -306,8 +355,51 @@ document.addEventListener('DOMContentLoaded', () => {
     masterPasswordInput.placeholder = t.masterPasswordPlaceholder;
     masterPasswordConfirm.placeholder = t.confirmPasswordPlaceholder;
     searchInput.placeholder = t.searchPlaceholder;
+    settingsButton.title = t.settingsTitle;
+    autoLockLabel.textContent = t.autoLockLabel;
+    lockNowButton.textContent = t.lockNowButton;
+    Array.from(autoLockSelect.options).forEach((opt) => {
+      const v = parseInt(opt.value, 10);
+      opt.textContent = v === 0 ? t.autoLockNever : `${v} ${t.autoLockUnit}`;
+    });
     currentLang = lang;
     refreshVaultUI();
+  }
+
+  // Tier the score by character variety + length. Anything < 8 chars stays "weak"
+  // — the actual block on submit also enforces the min length.
+  function scorePasswordStrength(pwd) {
+    if (!pwd) return { tier: '', label: '' };
+    const t = tr();
+    const len = pwd.length;
+    let classes = 0;
+    if (/[a-z]/.test(pwd)) classes++;
+    if (/[A-Z]/.test(pwd)) classes++;
+    if (/[0-9]/.test(pwd)) classes++;
+    if (/[^A-Za-z0-9]/.test(pwd)) classes++;
+    let score = 0;
+    if (len >= 8) score++;
+    if (len >= 12) score++;
+    if (len >= 16) score++;
+    score += Math.max(0, classes - 1);
+    if (len < 8) return { tier: 'weak', label: t.strengthWeak };
+    if (score <= 2) return { tier: 'weak', label: t.strengthWeak };
+    if (score === 3) return { tier: 'fair', label: t.strengthFair };
+    if (score === 4) return { tier: 'good', label: t.strengthGood };
+    return { tier: 'strong', label: t.strengthStrong };
+  }
+
+  function updateStrengthMeter() {
+    if (vaultState !== 'setup' || masterPasswordSection.style.display === 'none') {
+      strengthBox.style.display = 'none';
+      return;
+    }
+    const pwd = masterPasswordInput.value;
+    if (!pwd) { strengthBox.style.display = 'none'; return; }
+    const { tier, label } = scorePasswordStrength(pwd);
+    strengthBox.className = 'mp-strength ' + tier;
+    strengthBox.style.display = 'flex';
+    strengthLabel.textContent = label;
   }
 
   function renderMasterPasswordSection(state) {
@@ -315,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showError('');
     masterPasswordInput.value = '';
     masterPasswordConfirm.value = '';
+    strengthBox.style.display = 'none';
 
     if (state === 'setup') {
       masterPasswordTitle.textContent = t.setupTitle;
@@ -486,6 +579,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let res;
     if (vaultState === 'setup') {
+      if (pwd.length < MIN_MASTER_PASSWORD_LENGTH) {
+        showError(t.errPasswordTooShort);
+        return;
+      }
       const confirmPwd = masterPasswordConfirm.value;
       if (pwd !== confirmPwd) { showError(t.errPasswordMismatch); return; }
       res = await sendBg({ type: 'SETUP_VAULT', payload: { masterPassword: pwd, confirmPassword: confirmPwd } });
@@ -524,6 +621,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveMasterPasswordButton.addEventListener('click', submitMasterPassword);
 
+    masterPasswordInput.addEventListener('input', updateStrengthMeter);
+
     masterPasswordInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -533,6 +632,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     masterPasswordConfirm.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); submitMasterPassword(); }
+    });
+
+    settingsButton.addEventListener('click', async () => {
+      const open = settingsPanel.style.display !== 'none';
+      if (open) {
+        settingsPanel.style.display = 'none';
+        return;
+      }
+      const res = await sendBg({ type: 'GET_SETTINGS' });
+      const minutes = (res && res.settings && typeof res.settings.autoLockMinutes === 'number')
+        ? res.settings.autoLockMinutes : 15;
+      autoLockSelect.value = String(minutes);
+      settingsPanel.style.display = 'block';
+    });
+
+    autoLockSelect.addEventListener('change', async () => {
+      const minutes = parseInt(autoLockSelect.value, 10);
+      await sendBg({ type: 'SET_SETTINGS', payload: { autoLockMinutes: minutes } });
+    });
+
+    lockNowButton.addEventListener('click', async () => {
+      await sendBg({ type: 'LOCK' });
+      settingsPanel.style.display = 'none';
+      refreshVaultUI();
     });
 
     exportButton.addEventListener('click', () => {

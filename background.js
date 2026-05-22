@@ -8,11 +8,15 @@ try {
 
 // --- Constants ---
 const META_KEY = '__meta__';
+const SETTINGS_KEY = '__settings__';
 const VERIFIER_PLAINTEXT = 'chrome-pass-verify-v2';
 const PBKDF2_ITERATIONS = 300000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
-const RESERVED_KEYS = new Set(['userLanguage', META_KEY]);
+const RESERVED_KEYS = new Set(['userLanguage', META_KEY, SETTINGS_KEY]);
+const AUTO_LOCK_ALARM = 'chrome-pass-auto-lock';
+const DEFAULT_AUTO_LOCK_MINUTES = 15;
+const ALLOWED_AUTO_LOCK_MINUTES = new Set([0, 1, 5, 15, 30, 60]);
 
 // --- Base64 helpers ---
 function bytesToBase64(bytes) {
@@ -163,6 +167,94 @@ async function getVaultState() {
   return { state: hasV1 ? 'migrate' : 'setup', unlocked: false };
 }
 
+// --- Settings ---
+async function getSettings() {
+  const { [SETTINGS_KEY]: s } = await getLocalStorage(SETTINGS_KEY);
+  const minutes = s && ALLOWED_AUTO_LOCK_MINUTES.has(s.autoLockMinutes)
+    ? s.autoLockMinutes
+    : DEFAULT_AUTO_LOCK_MINUTES;
+  return { autoLockMinutes: minutes };
+}
+
+async function setSettings(patch) {
+  const current = await getSettings();
+  const next = { ...current };
+  if (patch && typeof patch.autoLockMinutes === 'number'
+      && ALLOWED_AUTO_LOCK_MINUTES.has(patch.autoLockMinutes)) {
+    next.autoLockMinutes = patch.autoLockMinutes;
+  }
+  await setLocalStorage({ [SETTINGS_KEY]: next });
+  return next;
+}
+
+// --- Auto-lock alarm ---
+// Reschedules the alarm to fire `autoLockMinutes` from now. Called on unlock
+// AND on every successful unlocked operation, so user activity keeps the
+// vault open. autoLockMinutes === 0 means "never".
+async function rescheduleAutoLock() {
+  const { sessionKey } = await getSessionStorage('sessionKey');
+  if (!sessionKey) {
+    await chrome.alarms.clear(AUTO_LOCK_ALARM);
+    return;
+  }
+  const { autoLockMinutes } = await getSettings();
+  if (!autoLockMinutes) {
+    await chrome.alarms.clear(AUTO_LOCK_ALARM);
+    return;
+  }
+  await chrome.alarms.create(AUTO_LOCK_ALARM, { delayInMinutes: autoLockMinutes });
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === AUTO_LOCK_ALARM) {
+    clearSessionStorage().catch((e) => console.error('BG: auto-lock failed', e));
+  }
+});
+
+// --- Origin key migration ---
+// Pre-2026-05 storage keyed entries by bare hostname (e.g. "example.com"),
+// which collapses http/https. Rename any bare-hostname key to "https://<host>"
+// to make protocol explicit. If both shapes exist, merge entry arrays — dedup
+// by username, keeping the entry with the larger createdAt.
+function looksLikeOriginKey(key) {
+  return /^(https?:|file:|chrome-extension:)\/\//.test(key);
+}
+
+function mergeEntryArrays(a, b) {
+  const byUsername = new Map();
+  const consider = (e) => {
+    if (!e || typeof e !== 'object' || !e.username) return;
+    const prev = byUsername.get(e.username);
+    if (!prev || (e.createdAt || 0) > (prev.createdAt || 0)) {
+      byUsername.set(e.username, e);
+    }
+  };
+  toEntries(a).forEach(consider);
+  toEntries(b).forEach(consider);
+  return Array.from(byUsername.values());
+}
+
+async function migrateHostnameToOriginIfNeeded() {
+  const all = await getLocalStorage(null);
+  const updates = {};
+  const removes = [];
+  let dirty = false;
+  for (const key in all) {
+    if (!isCredentialKey(key)) continue;
+    if (looksLikeOriginKey(key)) continue;
+    const originKey = 'https://' + key;
+    const merged = mergeEntryArrays(all[originKey], all[key]);
+    if (merged.length) updates[originKey] = merged;
+    removes.push(key);
+    dirty = true;
+  }
+  if (dirty) {
+    if (Object.keys(updates).length) await setLocalStorage(updates);
+    if (removes.length) await removeLocalStorage(removes);
+    console.log('BG: Migrated', removes.length, 'hostname keys to origin form.');
+  }
+}
+
 // --- Storage shape migration (legacy single-object → array). Independent of crypto. ---
 async function migrateStorageShapeIfNeeded() {
   const all = await getLocalStorage(null);
@@ -189,8 +281,12 @@ async function migrateStorageShapeIfNeeded() {
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => { migrateStorageShapeIfNeeded(); });
-chrome.runtime.onStartup.addListener(() => { migrateStorageShapeIfNeeded(); });
+async function runMigrations() {
+  await migrateStorageShapeIfNeeded();
+  await migrateHostnameToOriginIfNeeded();
+}
+chrome.runtime.onInstalled.addListener(() => { runMigrations(); });
+chrome.runtime.onStartup.addListener(() => { runMigrations(); });
 
 // --- Handlers ---
 
@@ -226,6 +322,7 @@ async function handleSetup(payload) {
     }
   });
   await setSessionStorage({ sessionKey: bytesToBase64(rawKey) });
+  await rescheduleAutoLock();
   return { status: 'success' };
 }
 
@@ -246,6 +343,7 @@ async function handleUnlock(payload) {
       return { status: 'error', code: 'WRONG_PASSWORD' };
     }
     await setSessionStorage({ sessionKey: bytesToBase64(rawKey) });
+    await rescheduleAutoLock();
     return { status: 'success' };
   }
 
@@ -313,12 +411,14 @@ async function migrateAndUnlock(masterPassword) {
   };
   await setLocalStorage(updates);
   await setSessionStorage({ sessionKey: bytesToBase64(rawKey) });
+  await rescheduleAutoLock();
   console.log('BG: Migrated', migratedCount, 'entries from v1 to v2.');
   return { status: 'success', migrated: migratedCount };
 }
 
 async function handleLock() {
   await clearSessionStorage();
+  await chrome.alarms.clear(AUTO_LOCK_ALARM);
   return { status: 'success' };
 }
 
@@ -423,6 +523,24 @@ async function handleFillRequest(payload) {
   }
 }
 
+async function handleGetSettings() {
+  const settings = await getSettings();
+  return { status: 'success', settings };
+}
+
+async function handleSetSettings(payload) {
+  const settings = await setSettings(payload || {});
+  await rescheduleAutoLock();
+  return { status: 'success', settings };
+}
+
+// Messages that count as "user activity" and should reset the auto-lock timer.
+// Excludes pure status pings (GET_VAULT_STATE, CHECK_UNLOCKED) so background
+// polling from other surfaces doesn't keep the vault open indefinitely.
+const ACTIVITY_MESSAGES = new Set([
+  'LIST_ENTRIES', 'SAVE_FROM_PAGE', 'DELETE_ENTRY', 'GET_DECRYPTED', 'FILL_REQUEST'
+]);
+
 // --- Router ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const route = async () => {
@@ -437,10 +555,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       case 'DELETE_ENTRY': return handleDeleteEntry(request.payload);
       case 'GET_DECRYPTED': return handleGetDecrypted(request.payload);
       case 'FILL_REQUEST': return handleFillRequest(request.payload);
+      case 'GET_SETTINGS': return handleGetSettings();
+      case 'SET_SETTINGS': return handleSetSettings(request.payload);
       default: return { status: 'error', message: 'Unknown message type: ' + request.type };
     }
   };
-  route().then(sendResponse).catch((e) => {
+  route().then((result) => {
+    if (ACTIVITY_MESSAGES.has(request.type) && result && result.status === 'success') {
+      rescheduleAutoLock().catch(() => {});
+    }
+    sendResponse(result);
+  }).catch((e) => {
     console.error('BG: handler error', e);
     sendResponse({ status: 'error', message: e.message || String(e) });
   });

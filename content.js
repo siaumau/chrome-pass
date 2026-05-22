@@ -2,7 +2,11 @@
   if (window.__chromePassInjected) return;
   window.__chromePassInjected = true;
 
-  const HOST_URL = window.location.hostname;
+  // Origin (e.g. "https://example.com") instead of bare hostname — avoids
+  // collapsing http and https into the same vault entry. Bail out on opaque
+  // origins ("null"), which happen on sandboxed iframes and some file:// pages.
+  const HOST_URL = window.location.origin;
+  if (!HOST_URL || HOST_URL === 'null') return;
 
   const translations = {
     en: {
@@ -20,7 +24,15 @@
       updateSuccess: 'Updated.',
       saveNeedsUsername: 'Fill in username and password first.',
       close: 'Close',
-      lockedHint: 'Locked — enter master password to use saved accounts.'
+      lockedHint: 'Locked — enter master password to use saved accounts.',
+      generate: 'Generate password',
+      genLength: 'Length',
+      genLower: 'a-z',
+      genUpper: 'A-Z',
+      genDigits: '0-9',
+      genSymbols: 'Symbols',
+      genUseFill: 'Use & fill',
+      genNeedClass: 'Pick at least one character set.'
     },
     zh_CN: {
       title: 'Chrome Pass',
@@ -37,7 +49,15 @@
       updateSuccess: '已更新。',
       saveNeedsUsername: '请先填入帐号和密码。',
       close: '关闭',
-      lockedHint: '已锁定 — 请输入主密码以使用已储存的帐号。'
+      lockedHint: '已锁定 — 请输入主密码以使用已储存的帐号。',
+      generate: '生成密码',
+      genLength: '长度',
+      genLower: 'a-z',
+      genUpper: 'A-Z',
+      genDigits: '0-9',
+      genSymbols: '符号',
+      genUseFill: '使用并填入',
+      genNeedClass: '请至少选择一种字符集。'
     },
     zh_TW: {
       title: 'Chrome Pass',
@@ -54,7 +74,15 @@
       updateSuccess: '已更新。',
       saveNeedsUsername: '請先填入帳號與密碼。',
       close: '關閉',
-      lockedHint: '已鎖定 — 請輸入主密碼以使用已儲存的帳號。'
+      lockedHint: '已鎖定 — 請輸入主密碼以使用已儲存的帳號。',
+      generate: '產生密碼',
+      genLength: '長度',
+      genLower: 'a-z',
+      genUpper: 'A-Z',
+      genDigits: '0-9',
+      genSymbols: '符號',
+      genUseFill: '使用並填入',
+      genNeedClass: '請至少選擇一種字元集。'
     },
     ja: {
       title: 'Chrome Pass',
@@ -71,7 +99,15 @@
       updateSuccess: '更新しました。',
       saveNeedsUsername: 'ユーザー名とパスワードを入力してください。',
       close: '閉じる',
-      lockedHint: 'ロック中 — マスターパスワードを入力してください。'
+      lockedHint: 'ロック中 — マスターパスワードを入力してください。',
+      generate: 'パスワード生成',
+      genLength: '長さ',
+      genLower: 'a-z',
+      genUpper: 'A-Z',
+      genDigits: '0-9',
+      genSymbols: '記号',
+      genUseFill: '使用して入力',
+      genNeedClass: '少なくとも 1 種類を選んでください。'
     }
   };
 
@@ -156,6 +192,35 @@
     setNativeValue(passwordInput, password);
   }
 
+  // --- Password generator ---
+  // Cryptographically secure password using crypto.getRandomValues with
+  // rejection sampling (drop bytes ≥ floor(256 / N) * N) so character
+  // selection is uniform across the chosen alphabet.
+  const GEN_LOWER = 'abcdefghijklmnopqrstuvwxyz';
+  const GEN_UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const GEN_DIGITS = '0123456789';
+  const GEN_SYMBOLS = '!@#$%^&*()-_=+[]{};:,.?/';
+
+  function generatePassword({ length, lower, upper, digits, symbols }) {
+    let alphabet = '';
+    if (lower) alphabet += GEN_LOWER;
+    if (upper) alphabet += GEN_UPPER;
+    if (digits) alphabet += GEN_DIGITS;
+    if (symbols) alphabet += GEN_SYMBOLS;
+    if (!alphabet) return '';
+    const n = alphabet.length;
+    const cutoff = Math.floor(256 / n) * n;
+    const out = [];
+    const buf = new Uint8Array(length * 2);
+    while (out.length < length) {
+      crypto.getRandomValues(buf);
+      for (let i = 0; i < buf.length && out.length < length; i++) {
+        if (buf[i] < cutoff) out.push(alphabet[buf[i] % n]);
+      }
+    }
+    return out.join('');
+  }
+
   // --- Shadow DOM popup ---
   const SHADOW_CSS = `
     :host { all: initial; }
@@ -211,6 +276,24 @@
     .toast { margin-top: 8px; font-size: 12px; color: #155724; background: #d4edda; padding: 6px 8px; border-radius: 4px; }
     .toast.error { color: #721c24; background: #f8d7da; }
     .divider { height: 1px; background: #eee; margin: 10px 0; }
+    .gen-panel { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 8px; margin-top: 8px; }
+    .gen-output {
+      display: flex; gap: 6px; align-items: center; margin-bottom: 6px;
+    }
+    .gen-output input {
+      flex: 1; padding: 6px 8px; border: 1px solid #ccd0d5; border-radius: 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px;
+      background: #fff; color: #212529;
+    }
+    .gen-row {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      font-size: 12px; color: #495057; margin-top: 6px;
+    }
+    .gen-row label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+    .gen-row input[type="range"] { flex: 1; min-width: 80px; }
+    .gen-row .length-val { font-variant-numeric: tabular-nums; min-width: 22px; text-align: right; }
+    .gen-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .gen-actions .btn { flex: 1; padding: 6px 8px; font-size: 12px; }
   `;
 
   let host = null;
@@ -427,6 +510,107 @@
       }
     });
     body.appendChild(btn);
+
+    renderGenerator(body);
+  }
+
+  function renderGenerator(body) {
+    const toggle = document.createElement('button');
+    toggle.className = 'btn secondary block';
+    toggle.style.marginTop = '6px';
+    toggle.textContent = t.generate;
+    body.appendChild(toggle);
+
+    const panel = document.createElement('div');
+    panel.className = 'gen-panel';
+    panel.style.display = 'none';
+    body.appendChild(panel);
+
+    const output = document.createElement('div');
+    output.className = 'gen-output';
+    const outInput = document.createElement('input');
+    outInput.type = 'text';
+    outInput.readOnly = true;
+    outInput.spellcheck = false;
+    output.appendChild(outInput);
+    panel.appendChild(output);
+
+    const lenRow = document.createElement('div');
+    lenRow.className = 'gen-row';
+    const lenLabel = document.createElement('span');
+    lenLabel.textContent = t.genLength;
+    const lenSlider = document.createElement('input');
+    lenSlider.type = 'range';
+    lenSlider.min = '8';
+    lenSlider.max = '40';
+    lenSlider.value = '16';
+    const lenVal = document.createElement('span');
+    lenVal.className = 'length-val';
+    lenVal.textContent = lenSlider.value;
+    lenSlider.addEventListener('input', () => { lenVal.textContent = lenSlider.value; regenerate(); });
+    lenRow.appendChild(lenLabel);
+    lenRow.appendChild(lenSlider);
+    lenRow.appendChild(lenVal);
+    panel.appendChild(lenRow);
+
+    const classRow = document.createElement('div');
+    classRow.className = 'gen-row';
+    const makeBox = (label, checked) => {
+      const wrap = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = checked;
+      cb.addEventListener('change', regenerate);
+      const span = document.createElement('span');
+      span.textContent = label;
+      wrap.appendChild(cb);
+      wrap.appendChild(span);
+      classRow.appendChild(wrap);
+      return cb;
+    };
+    const cbLower = makeBox(t.genLower, true);
+    const cbUpper = makeBox(t.genUpper, true);
+    const cbDigits = makeBox(t.genDigits, true);
+    const cbSymbols = makeBox(t.genSymbols, true);
+    panel.appendChild(classRow);
+
+    const actions = document.createElement('div');
+    actions.className = 'gen-actions';
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn secondary';
+    refreshBtn.textContent = '↻';
+    refreshBtn.title = t.generate;
+    refreshBtn.addEventListener('click', regenerate);
+    const useBtn = document.createElement('button');
+    useBtn.className = 'btn';
+    useBtn.textContent = t.genUseFill;
+    useBtn.addEventListener('click', () => {
+      if (!outInput.value || !currentPasswordInput) return;
+      setNativeValue(currentPasswordInput, outInput.value);
+      panel.style.display = 'none';
+    });
+    actions.appendChild(refreshBtn);
+    actions.appendChild(useBtn);
+    panel.appendChild(actions);
+
+    function regenerate() {
+      const opts = {
+        length: parseInt(lenSlider.value, 10) || 16,
+        lower: cbLower.checked,
+        upper: cbUpper.checked,
+        digits: cbDigits.checked,
+        symbols: cbSymbols.checked
+      };
+      const pwd = generatePassword(opts);
+      outInput.value = pwd;
+      if (!pwd) showToast(t.genNeedClass, true);
+    }
+
+    toggle.addEventListener('click', () => {
+      const open = panel.style.display !== 'none';
+      panel.style.display = open ? 'none' : 'block';
+      if (!open && !outInput.value) regenerate();
+    });
   }
 
   // --- Event wiring ---

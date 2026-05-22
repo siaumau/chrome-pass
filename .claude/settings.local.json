@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node --check background.js)"
+      "Bash(node --check background.js)",
+      "Bash(node --check content.js)",
+      "Bash(node --check popup.js)"
     ]
   }
 }

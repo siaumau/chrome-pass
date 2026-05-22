@@ -8,7 +8,8 @@
     "storage",
     "activeTab",
     "scripting",
-    "webNavigation"
+    "webNavigation",
+    "alarms"
   ],
   "background": {
     "service_worker": "background.js"
