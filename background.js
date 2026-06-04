@@ -9,11 +9,14 @@ try {
 // --- Constants ---
 const META_KEY = '__meta__';
 const SETTINGS_KEY = '__settings__';
+// Map of origin -> true for sites where the user turned off the auto-show popup.
+// Reserved so migrations never treat it as a credential entry.
+const AUTOFILL_SUPPRESS_KEY = '__autofillSuppressed__';
 const VERIFIER_PLAINTEXT = 'chrome-pass-verify-v2';
 const PBKDF2_ITERATIONS = 300000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
-const RESERVED_KEYS = new Set(['userLanguage', META_KEY, SETTINGS_KEY]);
+const RESERVED_KEYS = new Set(['userLanguage', META_KEY, SETTINGS_KEY, AUTOFILL_SUPPRESS_KEY]);
 const AUTO_LOCK_ALARM = 'chrome-pass-auto-lock';
 const DEFAULT_AUTO_LOCK_MINUTES = 15;
 const ALLOWED_AUTO_LOCK_MINUTES = new Set([0, 1, 5, 15, 30, 60]);

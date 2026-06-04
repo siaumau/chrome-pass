@@ -32,7 +32,11 @@
       genDigits: '0-9',
       genSymbols: 'Symbols',
       genUseFill: 'Use & fill',
-      genNeedClass: 'Pick at least one character set.'
+      genNeedClass: 'Pick at least one character set.',
+      suppressSite: "Don't auto-show on this site",
+      enableAutofill: 'Re-enable auto-show here',
+      autofillEnabled: 'Auto-show re-enabled.',
+      suppressedHint: 'Auto-show is off for this site.'
     },
     zh_CN: {
       title: 'Chrome Pass',
@@ -57,7 +61,11 @@
       genDigits: '0-9',
       genSymbols: '符号',
       genUseFill: '使用并填入',
-      genNeedClass: '请至少选择一种字符集。'
+      genNeedClass: '请至少选择一种字符集。',
+      suppressSite: '此网站不再自动显示',
+      enableAutofill: '重新开启自动显示',
+      autofillEnabled: '已重新开启自动显示。',
+      suppressedHint: '此网站的自动显示已关闭。'
     },
     zh_TW: {
       title: 'Chrome Pass',
@@ -82,7 +90,11 @@
       genDigits: '0-9',
       genSymbols: '符號',
       genUseFill: '使用並填入',
-      genNeedClass: '請至少選擇一種字元集。'
+      genNeedClass: '請至少選擇一種字元集。',
+      suppressSite: '此網站不再自動顯示',
+      enableAutofill: '重新開啟自動顯示',
+      autofillEnabled: '已重新開啟自動顯示。',
+      suppressedHint: '此網站的自動顯示已關閉。'
     },
     ja: {
       title: 'Chrome Pass',
@@ -107,7 +119,11 @@
       genDigits: '0-9',
       genSymbols: '記号',
       genUseFill: '使用して入力',
-      genNeedClass: '少なくとも 1 種類を選んでください。'
+      genNeedClass: '少なくとも 1 種類を選んでください。',
+      suppressSite: 'このサイトで自動表示しない',
+      enableAutofill: 'このサイトで自動表示を再開',
+      autofillEnabled: '自動表示を再開しました。',
+      suppressedHint: 'このサイトの自動表示はオフです。'
     }
   };
 
@@ -123,9 +139,45 @@
     } catch (e) { /* extension context invalidated; ignore */ }
   }
   loadLang();
+
+  // --- Per-site auto-show suppression ---
+  // When the user picks "don't auto-show on this site", we record this origin in
+  // a reserved chrome.storage.local key (a map of origin -> true). focusin then
+  // stops auto-opening the popup on this origin until it's re-enabled — from this
+  // popup's footer or the extension popup's settings. The keyboard shortcut still
+  // force-opens regardless, so the user can always save deliberately.
+  const AUTOFILL_SUPPRESS_KEY = '__autofillSuppressed__';
+  let autofillSuppressed = false;
+
+  function loadSuppressed() {
+    try {
+      chrome.storage.local.get(AUTOFILL_SUPPRESS_KEY, (res) => {
+        const map = res && res[AUTOFILL_SUPPRESS_KEY];
+        autofillSuppressed = !!(map && map[HOST_URL]);
+      });
+    } catch (e) { /* extension context invalidated; ignore */ }
+  }
+
+  function setSuppressed(on) {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(AUTOFILL_SUPPRESS_KEY, (res) => {
+          const map = { ...((res && res[AUTOFILL_SUPPRESS_KEY]) || {}) };
+          if (on) map[HOST_URL] = true; else delete map[HOST_URL];
+          autofillSuppressed = on;
+          chrome.storage.local.set({ [AUTOFILL_SUPPRESS_KEY]: map }, () => resolve());
+        });
+      } catch (e) { resolve(); }
+    });
+  }
+
+  loadSuppressed();
+
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'local' && changes.userLanguage) loadLang();
+      if (area !== 'local') return;
+      if (changes.userLanguage) loadLang();
+      if (changes[AUTOFILL_SUPPRESS_KEY]) loadSuppressed();
     });
   } catch (e) { /* ignore */ }
 
@@ -373,6 +425,15 @@
     body.className = 'body';
     root.appendChild(body);
 
+    // Shown only when the popup was force-opened (keyboard shortcut) on a site
+    // where auto-show is currently off, so the user knows why it didn't pop up.
+    if (autofillSuppressed) {
+      const sh = document.createElement('p');
+      sh.className = 'hint';
+      sh.textContent = t.suppressedHint;
+      body.appendChild(sh);
+    }
+
     const vaultState = await sendBg({ type: 'GET_VAULT_STATE' });
     if (!vaultState || vaultState.status !== 'success') {
       const err = document.createElement('div');
@@ -392,6 +453,34 @@
     } else {
       renderUnlock(body, vaultState.state);
     }
+
+    renderFooter(body);
+  }
+
+  // Site-level control, shown in every state: suppress auto-show on this origin,
+  // or (if already suppressed) re-enable it.
+  function renderFooter(body) {
+    const divider = document.createElement('div');
+    divider.className = 'divider';
+    body.appendChild(divider);
+
+    const btn = document.createElement('button');
+    btn.className = 'btn secondary block';
+    if (autofillSuppressed) {
+      btn.textContent = t.enableAutofill;
+      btn.addEventListener('click', async () => {
+        await setSuppressed(false);
+        showToast(t.autofillEnabled, false);
+        setTimeout(() => render(), 500);
+      });
+    } else {
+      btn.textContent = t.suppressSite;
+      btn.addEventListener('click', async () => {
+        await setSuppressed(true);
+        hidePopup();
+      });
+    }
+    body.appendChild(btn);
   }
 
   function renderSetupRequired(body) {
@@ -617,10 +706,28 @@
   document.addEventListener('focusin', (e) => {
     const tgt = e.target;
     if (!tgt || !tgt.matches || !tgt.matches('input[type="password"]')) return;
+    if (autofillSuppressed) return;
     if (suppressForElement.has(tgt)) return;
     currentPasswordInput = tgt;
     render();
   });
+
+  // Force-open shortcut (Alt+Shift+P): bring up the popup even when auto-show is
+  // suppressed for this site, so the user can still save a password or re-enable.
+  // Capture phase + e.code so it survives pages that stopPropagation on keydown
+  // and is layout-independent.
+  document.addEventListener('keydown', (e) => {
+    if (!e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey) return;
+    if (e.code !== 'KeyP') return;
+    const active = document.activeElement;
+    const tgt = (active && active.matches && active.matches('input[type="password"]'))
+      ? active
+      : document.querySelector('input[type="password"]');
+    if (!tgt) return;
+    e.preventDefault();
+    currentPasswordInput = tgt;
+    render();
+  }, true);
 
   document.addEventListener('mousedown', (e) => {
     if (!host || host.style.display === 'none') return;
